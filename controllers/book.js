@@ -25,10 +25,16 @@ exports.createBook = async (req, res, next) => {
 
     const filename = req.file.filename;
 
+    // Utiliser le chemin de l'image redimensionnée
+    const resizedImagePath = req.file.path.replace(
+      /\/images\//,
+      "/images/resized_"
+    );
+
     const book = new Book({
       ...bookObject,
       userId: req.auth.userId,
-      imageUrl: `${req.protocol}://${req.get("host")}/images/${filename}`,
+      imageUrl: `${req.protocol}://${req.get("host")}/${resizedImagePath}`,
     });
 
     await book.save();
@@ -86,18 +92,43 @@ exports.modifyBook = (req, res, next) => {
 exports.deleteBook = (req, res, next) => {
   Book.findOne({ _id: req.params.id })
     .then((book) => {
-      if (book.userId != req.auth.userId) {
-        res.status(401).json({ message: "Non autorisé" });
-      } else {
-        const filename = book.imageUrl.split("/images/")[1];
-        fs.unlink(`images/${filename}`, () => {
-          Book.deleteOne({ _id: req.params.id })
-            .then(() => {
-              res.status(200).json({ message: "Livre supprimé !" });
-            })
-            .catch((error) => res.status(401).json({ error }));
-        });
+      if (!book) {
+        return res.status(404).json({ message: "Livre non trouvé" });
       }
+      if (book.userId != req.auth.userId) {
+        return res.status(401).json({ message: "Non autorisé" });
+      }
+
+      // Supprimer l'image d'origine
+      const originalImagePath = book.imageUrl.replace(
+        `${req.protocol}://${req.get("host")}/`,
+        ""
+      );
+      fs.unlink(originalImagePath, (err) => {
+        if (err) {
+          console.error(err);
+        }
+        console.log("Image originale supprimée avec succès");
+      });
+
+      // Supprimer l'image redimensionnée
+      const resizedImagePath = book.imageUrl.replace(
+        `${req.protocol}://${req.get("host")}/images/`,
+        "resized_images/"
+      );
+      fs.unlink(resizedImagePath, (err) => {
+        if (err) {
+          console.error(err);
+        }
+        console.log("Image redimensionnée supprimée avec succès");
+      });
+
+      // Supprimer le livre de la base de données
+      Book.deleteOne({ _id: req.params.id })
+        .then(() => {
+          res.status(200).json({ message: "Livre supprimé !" });
+        })
+        .catch((error) => res.status(401).json({ error }));
     })
     .catch((error) => {
       res.status(500).json({ error });
