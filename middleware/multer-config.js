@@ -21,11 +21,8 @@ const storage = multer.diskStorage({
   },
 });
 
-// Exporter uniquement la configuration multer
-const upload = multer({ storage: storage }).single("image");
-
-// Exporter la fonction de redimensionnement d'image
-const resizeImage = (req, res, next) => {
+module.exports = multer({ storage: storage }).single("image");
+module.exports.resizeImage = (req, res, next) => {
   if (!req.file) {
     return next();
   }
@@ -48,5 +45,3 @@ const resizeImage = (req, res, next) => {
       return next();
     });
 };
-
-module.exports = { upload, resizeImage };

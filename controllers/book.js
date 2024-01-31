@@ -25,16 +25,10 @@ exports.createBook = async (req, res, next) => {
 
     const filename = req.file.filename;
 
-    // Utiliser le chemin de l'image redimensionnée
-    const resizedImagePath = req.file.path.replace(
-      /\/images\//,
-      "/images/resized_"
-    );
-
     const book = new Book({
       ...bookObject,
       userId: req.auth.userId,
-      imageUrl: `${req.protocol}://${req.get("host")}/${resizedImagePath}`,
+      imageUrl: `${req.protocol}://${req.get("host")}/images/${filename}`,
     });
 
     await book.save();
@@ -89,56 +83,60 @@ exports.modifyBook = (req, res, next) => {
     });
 };
 
-exports.deleteBook = (req, res, next) => {
-  Book.findOne({ _id: req.params.id })
-    .then((book) => {
-      if (!book) {
-        return res.status(404).json({ message: "Livre non trouvé" });
+exports.deleteBook = async (req, res, next) => {
+  try {
+    const book = await Book.findOne({ _id: req.params.id });
+
+    if (!book) {
+      return res.status(404).json({ error: "Le livre n'a pas été trouvé" });
+    }
+
+    if (book.userId !== req.auth.userId) {
+      return res.status(401).json({ message: "Non autorisé" });
+    }
+
+    const filename = book.imageUrl.split("/images/")[1];
+    const resizedFilename = `resized_${filename}`;
+
+    // Supprimer l'image importée par l'utilisateur
+    fs.unlink(`images/${filename}`, (err) => {
+      if (err) {
+        console.error(
+          "Erreur lors de la suppression de l'image importée :",
+          err
+        );
       }
-      if (book.userId != req.auth.userId) {
-        return res.status(401).json({ message: "Non autorisé" });
-      }
-
-      // Supprimer l'image d'origine
-      const originalImagePath = book.imageUrl.replace(
-        `${req.protocol}://${req.get("host")}/`,
-        ""
-      );
-      fs.unlink(originalImagePath, (err) => {
-        if (err) {
-          console.error(err);
-        }
-        console.log("Image originale supprimée avec succès");
-      });
-
-      // Supprimer l'image redimensionnée
-      const resizedImagePath = book.imageUrl.replace(
-        `${req.protocol}://${req.get("host")}/images/`,
-        "resized_images/"
-      );
-      fs.unlink(resizedImagePath, (err) => {
-        if (err) {
-          console.error(err);
-        }
-        console.log("Image redimensionnée supprimée avec succès");
-      });
-
-      // Supprimer le livre de la base de données
-      Book.deleteOne({ _id: req.params.id })
-        .then(() => {
-          res.status(200).json({ message: "Livre supprimé !" });
-        })
-        .catch((error) => res.status(401).json({ error }));
-    })
-    .catch((error) => {
-      res.status(500).json({ error });
     });
+
+    // Supprimer l'image redimensionnée
+    fs.unlink(`images/${resizedFilename}`, (err) => {
+      if (err) {
+        console.error(
+          "Erreur lors de la suppression de l'image redimensionnée :",
+          err
+        );
+      }
+    });
+
+    // Supprimer le livre de la base de données
+    await Book.deleteOne({ _id: req.params.id });
+
+    res.status(200).json({ message: "Livre supprimé !" });
+  } catch (error) {
+    handleServerError(res, error);
+  }
 };
 
 exports.getAllBooks = async (req, res, next) => {
   try {
     const books = await Book.find();
-    res.status(200).json(books);
+    const booksWithResizedImages = books.map((book) => {
+      return {
+        ...book.toJSON(),
+        imageUrl: book.imageUrl.replace("/images/", "/images/resized_"),
+      };
+    });
+    res.status(200).json(booksWithResizedImages);
   } catch (error) {
     handleServerError(res, error);
   }
@@ -186,7 +184,13 @@ exports.getTopRatedBooks = async (req, res, next) => {
     const topRatedBooks = await Book.find()
       .sort({ averageRating: -1 })
       .limit(3);
-    res.status(200).json(topRatedBooks);
+    const topRatedBooksWithResizedImages = topRatedBooks.map((book) => {
+      return {
+        ...book.toJSON(),
+        imageUrl: book.imageUrl.replace("/images/", "/images/resized_"),
+      };
+    });
+    res.status(200).json(topRatedBooksWithResizedImages);
   } catch (error) {
     handleServerError(res, error);
   }
