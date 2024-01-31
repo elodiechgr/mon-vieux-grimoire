@@ -44,11 +44,16 @@ exports.getOneBook = async (req, res, next) => {
   try {
     const book = await Book.findOne({ _id: req.params.id });
 
-    if (book) {
-      res.status(200).json(book);
-    } else {
-      res.status(404).json({ error: "Le livre n'a pas pu être trouvé" });
+    if (!book) {
+      return res.status(404).json({ error: "Le livre n'a pas pu être trouvé" });
     }
+
+    const bookWithResizedImage = {
+      ...book.toJSON(),
+      imageUrl: book.imageUrl.replace("/images/", "/images/resized_"),
+    };
+
+    res.status(200).json(bookWithResizedImage);
   } catch (error) {
     handleServerError(res, error);
   }
