@@ -106,10 +106,10 @@ exports.deleteBook = async (req, res, next) => {
     // Supprimer l'image importée par l'utilisateur
     fs.unlink(`images/${filename}`, (err) => {
       if (err) {
-        console.error(
-          "Erreur lors de la suppression de l'image importée :",
-          err
-        );
+        //console.error(
+        //"Erreur lors de la suppression de l'image importée :",
+        //err
+        //);
       }
     });
 
