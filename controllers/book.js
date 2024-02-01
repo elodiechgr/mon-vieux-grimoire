@@ -59,33 +59,51 @@ exports.getOneBook = async (req, res, next) => {
   }
 };
 
-exports.modifyBook = (req, res, next) => {
-  const bookObject = req.file
-    ? {
-        ...JSON.parse(req.body.book),
-        imageUrl: `${req.protocol}://${req.get("host")}/images/${
-          req.file.filename
-        }`,
-      }
-    : { ...req.body };
+exports.modifyBook = async (req, res, next) => {
+  try {
+    const bookObject = req.file
+      ? {
+          ...JSON.parse(req.body.book),
+          imageUrl: `${req.protocol}://${req.get("host")}/images/${
+            req.file.filename
+          }`,
+        }
+      : { ...req.body };
 
-  delete bookObject._userId;
-  Book.findOne({ _id: req.params.id })
-    .then((book) => {
-      if (book.userId != req.auth.userId) {
-        res.status(401).json({ message: "Non autorisé" });
-      } else {
-        Book.updateOne(
-          { _id: req.params.id },
-          { ...bookObject, _id: req.params.id }
-        )
-          .then(() => res.status(200).json({ message: "Livre modifié!" }))
-          .catch((error) => res.status(401).json({ error }));
+    delete bookObject._userId;
+
+    const book = await Book.findOne({ _id: req.params.id });
+
+    if (!book) {
+      return res.status(404).json({ error: "Le livre n'a pas été trouvé" });
+    }
+
+    if (book.userId !== req.auth.userId) {
+      return res.status(401).json({ message: "Non autorisé" });
+    }
+
+    // Supprimer l'ancienne image redimensionnée
+    const oldFilename = book.imageUrl.split("/images/")[1];
+    const resizedOldFilename = `resized_${oldFilename}`;
+    fs.unlink(`images/${resizedOldFilename}`, (err) => {
+      if (err) {
+        console.error(
+          "Erreur lors de la suppression de l'ancienne image redimensionnée :",
+          err
+        );
       }
-    })
-    .catch((error) => {
-      res.status(400).json({ error });
     });
+
+    // Mettre à jour le livre avec les nouvelles informations
+    await Book.updateOne(
+      { _id: req.params.id },
+      { ...bookObject, _id: req.params.id }
+    );
+
+    res.status(200).json({ message: "Livre modifié!" });
+  } catch (error) {
+    handleServerError(res, error);
+  }
 };
 
 exports.deleteBook = async (req, res, next) => {
@@ -175,6 +193,10 @@ exports.addBookRating = async (req, res, next) => {
     }
 
     book.ratings.push({ userId: req.body.userId, grade: req.body.rating });
+    await book.save();
+
+    // Calculer la moyenne des notes
+    book.calculateAverageRating();
     await book.save();
 
     res.status(200).json(book);

@@ -16,4 +16,11 @@ const bookSchema = mongoose.Schema({
   averageRating: { type: Number },
 });
 
+// Fonction pour calculer la moyenne des notes
+bookSchema.methods.calculateAverageRating = function () {
+  const totalRatings = this.ratings.length;
+  const totalGrade = this.ratings.reduce((acc, curr) => acc + curr.grade, 0);
+  this.averageRating = totalGrade / totalRatings;
+};
+
 module.exports = mongoose.model("Book", bookSchema);
